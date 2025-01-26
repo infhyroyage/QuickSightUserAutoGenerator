@@ -22,6 +22,6 @@ bar
 Run the script:
 
 ```sh
-pip install python-dotenv
+pip install python-dotenv selenium
 python main.py
 ```

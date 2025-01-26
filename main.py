@@ -6,6 +6,11 @@ import os
 
 import boto3
 from dotenv import load_dotenv
+from selenium.webdriver import Chrome
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,7 +51,7 @@ def register_quicksight_user(client: boto3.client, name: str) -> str:
         name (str): QuickSight User Name
 
     Returns:
-        str: Response value of UserInvitationUrl
+        str: The QuickSight URL(UserInvitationUrl) to activate a QuickSight User
     """
 
     # Execute RegisterUser API
@@ -61,6 +66,43 @@ def register_quicksight_user(client: boto3.client, name: str) -> str:
 
     # Choose UserInvitationUrl from response
     return response["UserInvitationUrl"]
+
+
+def activate_quicksight_user(driver: Chrome, url: str) -> None:
+    """Activate a QuickSight User.
+
+    Args:
+        driver (selenium.webdriver.Chrome): Selenium Chrome Driver
+        url (str): Return value of register_quicksight_user()
+    """
+
+    # Open UserInvitationUrl
+    driver.get(url)
+
+    # Get input#awsui-input-1 Element and Set QuickSight Password
+    input_awsui_input_1 = WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.ID, "awsui-input-1"))
+    )
+    input_awsui_input_1.send_keys(os.getenv("QUICKSIGHT_PASSWORD"))
+
+    # Get input#awsui-input-0 Element and Set QuickSight Password
+    input_awsui_input_0 = WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.ID, "awsui-input-0"))
+    )
+    input_awsui_input_0.send_keys(os.getenv("QUICKSIGHT_PASSWORD"))
+
+    # Get button with type="submit" and Click
+    submit_button = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']"))
+    )
+    submit_button.click()
+
+    # Wait to Activate a QuickSight User Successfully
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located(
+            (By.CSS_SELECTOR, "div.awsui-alert.awsui-alert-type-success")
+        )
+    )
 
 
 if __name__ == "__main__":
@@ -81,13 +123,33 @@ if __name__ == "__main__":
         "[get_non_registered_quicksight_users] OK: %d", len(non_registered_usernames)
     )
 
-    for i, username in enumerate(non_registered_usernames):
-        # Register a QuickSight user
-        user_invitation_url = register_quicksight_user(quicksight_client, username)
-        logger.info(
-            "[register_quicksight_user] OK(%d/%d): %s",
-            i + 1,
-            len(non_registered_usernames),
-            username,
-        )
-        logger.info("UserInvitationUrl: %s", user_invitation_url)  # DEBUG
+    # Create a Selenium Chrome Driver
+    options: Options = Options()
+    options.add_argument("--headless")  # Headless Mode
+    options.add_argument("--disable-gpu")  # Disable GPU Hardware Acceleration
+    chrome_driver: Chrome = Chrome(options=options)
+    try:
+        for i, username in enumerate(non_registered_usernames):
+            # Register a QuickSight user
+            user_invitation_url = register_quicksight_user(quicksight_client, username)
+            logger.info(
+                "[register_quicksight_user] OK(%d/%d): %s",
+                i + 1,
+                len(non_registered_usernames),
+                username,
+            )
+
+            # Activate a QuickSight user
+            activate_quicksight_user(chrome_driver, user_invitation_url)
+            logger.info(
+                "[activate_quicksight_user] OK(%d/%d): %s",
+                i + 1,
+                len(non_registered_usernames),
+                username,
+            )
+    except Exception as e:
+        chrome_driver.save_screenshot("error.png")
+        raise e
+    finally:
+        # Close the Selenium Chrome Driver
+        chrome_driver.quit()

@@ -1,6 +1,7 @@
 """QuickSight User Auto Generator"""
 
 import csv
+import logging
 import os
 
 import boto3
@@ -8,6 +9,10 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def get_non_registered_quicksight_users(
@@ -72,10 +77,17 @@ if __name__ == "__main__":
     non_registered_usernames: list[str] = get_non_registered_quicksight_users(
         quicksight_client, usernames
     )
-    print(f"[get_non_registered_quicksight_users] OK: {len(non_registered_usernames)}")
+    logger.info(
+        "[get_non_registered_quicksight_users] OK: %d", len(non_registered_usernames)
+    )
 
-    for username in non_registered_usernames:
+    for i, username in enumerate(non_registered_usernames):
         # Register a QuickSight user
         user_invitation_url = register_quicksight_user(quicksight_client, username)
-        print(f"[register_quicksight_user] OK: {username}")
-        print(f"UserInvitationUrl: {user_invitation_url}")  # DEBUG
+        logger.info(
+            "[register_quicksight_user] OK(%d/%d): %s",
+            i + 1,
+            len(non_registered_usernames),
+            username,
+        )
+        logger.info("UserInvitationUrl: %s", user_invitation_url)  # DEBUG

@@ -10,6 +10,7 @@ AWS_ACCOUNT_ID="your_aws_account_id"
 AWS_REGION="your_aws_region"
 EMAIL="example@yourdomain.com"
 QUICKSIGHT_PASSWORD="your_quicksight_password"
+QUICKSIGHT_DASHBOARD_IDS="dashboardID1,dashboardID2,..."
 ```
 
 Create a `usernames.csv` CSV file with `UserName` column:

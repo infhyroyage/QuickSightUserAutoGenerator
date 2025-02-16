@@ -20,6 +20,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_quicksight_dashboard_ids() -> list[str]:
+    """Get QuickSight Dashboard IDs.
+
+    Returns:
+        list[str]: QuickSight Dashboard IDs
+    """
+
+    dashboard_ids = os.getenv("QUICKSIGHT_DASHBOARD_IDS")
+    return [d.strip() for d in dashboard_ids.split(",")] if dashboard_ids else []
+
+
 def get_non_registered_quicksight_users(
     client: boto3.client, all_names: list[str]
 ) -> list[str]:
@@ -105,11 +116,48 @@ def activate_quicksight_user(driver: Chrome, url: str) -> None:
     )
 
 
+def grant_dashboards_readonly_permission(
+    client: boto3.client, name: str, dashboard_ids: list[str]
+) -> None:
+    """Grant Read-Only Permissions to a QuickSight User for 2 Dashboards.
+
+    Args:
+        client (boto3.client): QuickSight Boto3 Client
+        name (str): QuickSight User Name
+        dashboard_ids (list[str]): QuickSight Dashboard IDs
+    """
+
+    principal = (
+        f"arn:aws:quicksight:{os.getenv('AWS_REGION')}:"
+        f"{os.getenv('AWS_ACCOUNT_ID')}:user/default/{name}"
+    )
+    # TODO: Verify the actions by using DescribeDashboardPermissions
+    actions = [
+        "quicksight:DescribeDashboard",
+        "quicksight:QueryDashboard",
+        "quicksight:ListDashboardVersions",
+    ]
+    for dashboard_id in dashboard_ids:
+        client.update_dashboard_permissions(
+            AwsAccountId=os.getenv("AWS_ACCOUNT_ID"),
+            DashboardId=dashboard_id,
+            GrantPermissions=[
+                {
+                    "Actions": actions,
+                    "Principal": principal,
+                }
+            ],
+        )
+
+
 if __name__ == "__main__":
     # Create a QuickSight Boto3 Client
     quicksight_client: boto3.client = boto3.client(
         "quicksight", region_name=os.getenv("AWS_REGION")
     )
+
+    # Read QuickSight Dashboard IDs
+    quicksight_dashboard_ids = get_quicksight_dashboard_ids()
 
     # Read All Values of only "UserName" Column from CSV file
     with open("usernames.csv", newline="", encoding="utf-8") as file:
@@ -147,6 +195,18 @@ if __name__ == "__main__":
                 len(non_registered_usernames),
                 username,
             )
+
+            # Grant Read-Only Permissions for Each Dashboard to a QuickSight User
+            grant_dashboards_readonly_permission(
+                quicksight_client, username, quicksight_dashboard_ids
+            )
+            logger.info(
+                "[grant_dashboards_readonly_permission] OK(%d/%d): %s",
+                i + 1,
+                len(non_registered_usernames),
+                username,
+            )
+
     except Exception as e:
         chrome_driver.save_screenshot("error.png")
         raise e

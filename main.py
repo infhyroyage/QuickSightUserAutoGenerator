@@ -111,9 +111,9 @@ if __name__ == "__main__":
         "quicksight", region_name=os.getenv("AWS_REGION")
     )
 
-    # Read All Values of "name" Column from CSV file
+    # Read All Values of only "UserName" Column from CSV file
     with open("usernames.csv", newline="", encoding="utf-8") as file:
-        usernames: list[str] = [row["name"] for row in csv.DictReader(file)]
+        usernames: list[str] = [row["UserName"] for row in csv.DictReader(file)]
 
     # Get Non-registered QuickSight users
     non_registered_usernames: list[str] = get_non_registered_quicksight_users(

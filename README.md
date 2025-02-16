@@ -12,10 +12,10 @@ EMAIL="example@yourdomain.com"
 QUICKSIGHT_PASSWORD="your_quicksight_password"
 ```
 
-Create a `usernames.csv` CSV file with `name` column:
+Create a `usernames.csv` CSV file with `UserName` column:
 
 ```
-name
+UserName
 foo
 bar
 ```

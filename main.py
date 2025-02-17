@@ -131,11 +131,10 @@ def grant_dashboards_readonly_permission(
         f"arn:aws:quicksight:{os.getenv('AWS_REGION')}:"
         f"{os.getenv('AWS_ACCOUNT_ID')}:user/default/{name}"
     )
-    # TODO: Verify the actions by using DescribeDashboardPermissions
     actions = [
         "quicksight:DescribeDashboard",
-        "quicksight:QueryDashboard",
         "quicksight:ListDashboardVersions",
+        "quicksight:QueryDashboard",
     ]
     for dashboard_id in dashboard_ids:
         client.update_dashboard_permissions(

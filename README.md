@@ -4,8 +4,15 @@
 
 1. Prepare Activated Amazon QuickSight Account.
 2. Enter CloudShell.
-3. Copy `main.py`.
-4. Create a `.env` file with the following variables:
+3. Install Chromium:
+
+   ```sh
+   wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+   sudo dnf install ./google-chrome-stable_current_x86_64.rpm
+   ```
+
+4. Copy `main.py` and `requirements.txt`.
+5. Create a `.env` file with the following variables:
 
    ```
    AWS_ACCOUNT_ID="your_aws_account_id"
@@ -15,7 +22,7 @@
    QUICKSIGHT_PASSWORD="your_quicksight_password"
    ```
 
-5. Create a `usernames.csv` CSV file with `UserName` column:
+6. Create a `usernames.csv` CSV file with `UserName` column:
 
    ```
    UserName
@@ -23,9 +30,9 @@
    bar
    ```
 
-6. Run the script:
+7. Run the script:
 
    ```sh
-   pip install python-dotenv selenium
+   pip install -r requirements.txt 
    python main.py
    ```

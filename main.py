@@ -12,23 +12,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+QUICKSIGHT_DASHBOARD_REQUIRED_ACTIONS: list[str] = [
+    "quicksight:DescribeDashboard",
+    "quicksight:ListDashboardVersions",
+    "quicksight:QueryDashboard",
+]
+
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def get_quicksight_dashboard_ids() -> list[str]:
-    """Get QuickSight Dashboard IDs.
-
-    Returns:
-        list[str]: QuickSight Dashboard IDs
-    """
-
-    dashboard_ids = os.getenv("QUICKSIGHT_DASHBOARD_IDS")
-    return [d.strip() for d in dashboard_ids.split(",")] if dashboard_ids else []
 
 
 def get_non_registered_quicksight_users(
@@ -50,7 +45,7 @@ def get_non_registered_quicksight_users(
     )
 
     # Filter Non-registered QuickSight Users
-    registered_names = [user["UserName"] for user in response["UserList"]]
+    registered_names: list[str] = [user["UserName"] for user in response["UserList"]]
     return [name for name in all_names if name not in registered_names]
 
 
@@ -116,37 +111,74 @@ def activate_quicksight_user(driver: Chrome, url: str) -> None:
     )
 
 
-def grant_dashboards_readonly_permission(
-    client: boto3.client, name: str, dashboard_ids: list[str]
+def get_quicksight_dashboard_ids() -> list[str]:
+    """Get QuickSight Dashboard IDs.
+
+    Returns:
+        list[str]: QuickSight Dashboard IDs
+    """
+
+    dashboard_ids: str = os.getenv("QUICKSIGHT_DASHBOARD_IDS")
+    return [d.strip() for d in dashboard_ids.split(",")] if dashboard_ids else []
+
+
+def get_non_permissioned_quicksight_users(
+    client: boto3.client, all_names: list[str], dashboard_id: str
+) -> list[str]:
+    """Get Non-permissioned QuickSight Users for a Dashboard.
+
+    Args:
+        client (boto3.client): QuickSight Boto3 Client
+        all_names (list[str]): All QuickSight User Names
+        dashboard_id (str): QuickSight Dashboard ID
+    Returns:
+        list[str]: Non-permissioned QuickSight Users for a Dashboard
+    """
+
+    response = client.describe_dashboard_permissions(
+        AwsAccountId=os.getenv("AWS_ACCOUNT_ID"),
+        DashboardId=dashboard_id,
+    )
+
+    permissioned_users: list[str] = []
+    for user_name in all_names:
+        principal: str = (
+            f"arn:aws:quicksight:{os.getenv('AWS_REGION')}:"
+            f"{os.getenv('AWS_ACCOUNT_ID')}:user/default/{user_name}"
+        )
+        for permission in response["Permissions"]:
+            if permission["Principal"] == principal and set(QUICKSIGHT_DASHBOARD_REQUIRED_ACTIONS).issubset(set(permission["Actions"])):
+                permissioned_users.append(user_name)
+                break
+
+    return [user_name for user_name in all_names if user_name not in permissioned_users]
+
+
+def grant_dashboard_permission(
+    client: boto3.client, name: str, dashboard_id: str
 ) -> None:
-    """Grant Read-Only Permissions to a QuickSight User for 2 Dashboards.
+    """Grant Permissions to a QuickSight User for a Dashboard.
 
     Args:
         client (boto3.client): QuickSight Boto3 Client
         name (str): QuickSight User Name
-        dashboard_ids (list[str]): QuickSight Dashboard IDs
+        dashboard_id (str): QuickSight Dashboard ID
     """
 
-    principal = (
+    principal: str = (
         f"arn:aws:quicksight:{os.getenv('AWS_REGION')}:"
         f"{os.getenv('AWS_ACCOUNT_ID')}:user/default/{name}"
     )
-    actions = [
-        "quicksight:DescribeDashboard",
-        "quicksight:ListDashboardVersions",
-        "quicksight:QueryDashboard",
-    ]
-    for dashboard_id in dashboard_ids:
-        client.update_dashboard_permissions(
-            AwsAccountId=os.getenv("AWS_ACCOUNT_ID"),
-            DashboardId=dashboard_id,
-            GrantPermissions=[
-                {
-                    "Actions": actions,
-                    "Principal": principal,
-                }
-            ],
-        )
+    client.update_dashboard_permissions(
+        AwsAccountId=os.getenv("AWS_ACCOUNT_ID"),
+        DashboardId=dashboard_id,
+        GrantPermissions=[
+            {
+                "Actions": QUICKSIGHT_DASHBOARD_REQUIRED_ACTIONS,
+                "Principal": principal,
+            }
+        ],
+    )
 
 
 if __name__ == "__main__":
@@ -154,9 +186,6 @@ if __name__ == "__main__":
     quicksight_client: boto3.client = boto3.client(
         "quicksight", region_name=os.getenv("AWS_REGION")
     )
-
-    # Read QuickSight Dashboard IDs
-    quicksight_dashboard_ids = get_quicksight_dashboard_ids()
 
     # Read All Values of only "UserName" Column from CSV file
     with open("usernames.csv", newline="", encoding="utf-8") as file:
@@ -178,7 +207,10 @@ if __name__ == "__main__":
     try:
         for i, username in enumerate(non_registered_usernames):
             # Register a QuickSight user
-            user_invitation_url = register_quicksight_user(quicksight_client, username)
+            user_invitation_url: str = register_quicksight_user(
+                quicksight_client,
+                username,
+            )
             logger.info(
                 "[register_quicksight_user] OK(%d/%d): %s",
                 i + 1,
@@ -195,17 +227,32 @@ if __name__ == "__main__":
                 username,
             )
 
-            # Grant Read-Only Permissions for Each Dashboard to a QuickSight User
-            grant_dashboards_readonly_permission(
-                quicksight_client, username, quicksight_dashboard_ids
+        # Read QuickSight Dashboard IDs
+        quicksight_dashboard_ids: list[str] = get_quicksight_dashboard_ids()
+
+        for quicksight_dashboard_id in quicksight_dashboard_ids:
+            # Get Non-permissioned QuickSight Users for each Dashboard
+            non_permissioned_usernames: list[str] = get_non_permissioned_quicksight_users(
+                quicksight_client, usernames, quicksight_dashboard_id
             )
             logger.info(
-                "[grant_dashboards_readonly_permission] OK(%d/%d): %s",
-                i + 1,
-                len(non_registered_usernames),
-                username,
+                "[get_non_permissioned_quicksight_users] OK(%s): %s",
+                quicksight_dashboard_id,
+                len(non_permissioned_usernames),
             )
 
+            for i, username in enumerate(non_permissioned_usernames):
+                # Grant Permissions to a QuickSight User for a Dashboard
+                grant_dashboard_permission(
+                    quicksight_client, username, quicksight_dashboard_id
+                )
+                logger.info(
+                    "[grant_dashboard_permission] OK(%s,%d/%d): %s",
+                    quicksight_dashboard_id,
+                    i + 1,
+                    len(non_permissioned_usernames),
+                    username,
+                )
     except Exception as e:
         chrome_driver.save_screenshot("error.png")
         raise e
